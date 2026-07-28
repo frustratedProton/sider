@@ -1,12 +1,13 @@
-#include <algorithm>
 #include <charconv>
 #include <cstddef>
 #include <cstdint>
 #include <iostream>
+#include <print>
 #include <stdexcept>
 #include <string>
 #include <string_view>
 #include <system_error>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -164,4 +165,110 @@ private:
   }
 };
 
-int main() { return 0; }
+class RespSerializer {
+public:
+  std::string serialize(const RespValue &val) {
+    switch (val.type) {
+    case RespValue::Type::Null:
+      return "$-1\r\n";
+
+    case RespValue::Type::SimpleString:
+      return '+' + std::get<std::string>(val.value) + "\r\n";
+
+    case RespValue::Type::Error:
+      return '-' + std::get<std::string>(val.value) + "\r\n";
+
+    case RespValue::Type::Integer:
+      return ':' + std::to_string(std::get<int64_t>(val.value)) + "\r\n";
+
+    case RespValue::Type::BulkString: {
+      const auto &s = std::get<std::string>(val.value);
+      return '$' + std::to_string(s.size()) + "\r\n" + s + "\r\n";
+    }
+
+    case RespValue::Type::Array: {
+      const auto &arr = std::get<RespArray>(val.value);
+      std::string out{'*'};
+      out += std::to_string(arr.size()) + "\r\n";
+      for (const auto &elem : arr) {
+        out += serialize(elem);
+      }
+      return out;
+    }
+    }
+    std::unreachable();
+  }
+};
+
+int main() {
+  RespParser parser{};
+  RespSerializer serializer{};
+
+  auto print_val = [](const RespValue &v, const std::string &label) {
+    std::println("{}:", label);
+    switch (v.type) {
+    case RespValue::Type::Null:
+      std::println("  type: Null");
+      break;
+    case RespValue::Type::SimpleString:
+      std::println("  type: SimpleString = {}", std::get<std::string>(v.value));
+      break;
+    case RespValue::Type::Error:
+      std::println("  type: Error = {}", std::get<std::string>(v.value));
+      break;
+    case RespValue::Type::Integer:
+      std::println("  type: Integer = {}", std::get<int64_t>(v.value));
+      break;
+    case RespValue::Type::BulkString:
+      std::println("  type: BulkString = {}", std::get<std::string>(v.value));
+      break;
+    case RespValue::Type::Array: {
+      const auto &arr = std::get<RespArray>(v.value);
+      std::println("  type: Array[{}]", arr.size());
+      for (std::size_t i = 0; i < arr.size(); ++i) {
+        std::println("  [{}] = {}", i, std::get<std::string>(arr[i].value));
+      }
+      break;
+    }
+    }
+  };
+
+  // --- PING ---
+  std::string_view ping_cmd{"*1\r\n$4\r\nPING\r\n"};
+  auto [ping_val, ping_consumed] = parser.parse(ping_cmd);
+  print_val(ping_val, "PING");
+  std::println("consumed: {} bytes\n", ping_consumed);
+
+  // --- serializer round trip ---
+  auto response = serializer.serialize(RespValue::ss("PONG"));
+  std::print("serialized PONG: ");
+  for (char c : response) {
+    if (c == '\r')
+      std::print("\\r");
+    else if (c == '\n')
+      std::print("\\n");
+    else
+      std::print("{}", c);
+  }
+  std::println("\n");
+
+  // --- SET ---
+  std::string_view set_cmd{"*3\r\n$3\r\nSET\r\n$3\r\nfoo\r\n$3\r\nbar\r\n"};
+  auto [set_val, set_consumed] = parser.parse(set_cmd);
+  print_val(set_val, "SET command");
+  std::println("consumed: {} bytes\n", set_consumed);
+
+  // --- null bulk string ---
+  std::string_view null_cmd{"$-1\r\n"};
+  auto [null_val, null_consumed] = parser.parse(null_cmd);
+  print_val(null_val, "NULL bulk string");
+  std::println("consumed: {} bytes\n", null_consumed);
+
+  // --- integer ---
+  std::string_view int_cmd{":1000\r\n"};
+  auto [int_val, int_consumed] = parser.parse(int_cmd);
+  print_val(int_val, "Integer");
+  std::println("consumed: {} bytes\n", int_consumed);
+
+  return 0;
+}
