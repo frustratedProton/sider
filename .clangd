@@ -1,0 +1,11 @@
+CompileFlags:
+  Add:
+    - -std=c++23
+    - -I/opt/gcc-15/include/c++/15.1.0
+    - -I/opt/gcc-15/include/c++/15.1.0/x86_64-pc-linux-gnu
+    - -I/opt/gcc-15/lib/gcc/x86_64-pc-linux-gnu/15.1.0/include
+    - -Wall
+  Compiler: /opt/gcc-15/bin/g++
+
+Index:
+  Background: Build
