@@ -1,6 +1,8 @@
 #pragma once
 
+#include "commands.hpp"
 #include "resp.hpp"
+#include "store.hpp"
 
 #include <array>
 #include <cctype>
@@ -66,6 +68,9 @@ private:
   uint16_t m_port{};
   int m_server_fd{-1};
 
+  Store m_store{};
+  CommandDispatcher m_dispatcher{m_store};
+
   RespParser m_parser{};
   RespSerializer m_serializer{};
 
@@ -86,7 +91,7 @@ private:
         try {
           auto [val, consumed] = m_parser.parse(buffer);
           buffer.erase(0, consumed);
-          auto resp = handle_cmd(val);
+          auto resp = m_dispatcher.dispatch(val);
           auto serialized = m_serializer.serialize(resp);
           write(client_fd, serialized.data(), serialized.size());
         } catch (const std::runtime_error &e) {
