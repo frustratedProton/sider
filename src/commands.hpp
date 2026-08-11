@@ -37,6 +37,12 @@ public:
       return del_cmd(args);
     if (cmd == "EXISTS")
       return exists_cmd(args);
+    if (cmd == "TTL")
+      return ttl_cmd(args);
+    if (cmd == "PTTL")
+      return pttl_cmd(args);
+    if (cmd == "PERSIST")
+      return persist_cmd(args);
 
     return RespValue::error("ERR unknown command '" + cmd + "'");
   }
@@ -64,9 +70,37 @@ private:
 
   // SET key value
   RespValue set_cmd(const RespArray &args) {
-    if (args.size() != 3)
+    if (args.size() < 3)
       return RespValue::error("ERR wrong number of arguments for SET");
-    m_store.set(arg(args, 1), arg(args, 2));
+    const auto &key = arg(args, 1);
+    const auto &val = arg(args, 2);
+
+    std::optional<std::chrono::milliseconds> ttl{};
+
+    for (std::size_t i = 3; i < args.size(); i += 2) {
+      if (i + 1 >= args.size())
+        return RespValue::error("ERR syntax error");
+
+      std::string opt = arg(args, i);
+      for (char &ch : opt)
+        ch = toupper(ch);
+
+      int64_t n{};
+      try {
+        n = std::stoll(arg(args, i + 1));
+      } catch (...) {
+        return RespValue::error("ERR value is not an integer");
+      }
+
+      if (opt == "EX")
+        ttl = std::chrono::seconds{n};
+      else if (opt == "PX")
+        ttl = std::chrono::milliseconds{n};
+      else
+        return RespValue::error("ERR syntax error");
+    }
+
+    m_store.set(key, val, ttl);
     return RespValue::ss("OK");
   }
 
@@ -100,5 +134,29 @@ private:
       if (m_store.exists(arg(args, 1)))
         ++count;
     return RespValue::integer(count);
+  }
+
+  // TTL key -> seconds
+  RespValue ttl_cmd(const RespArray &args) {
+    if (args.size() != 2)
+      return RespValue::error("ERR wrong number of arguments for TTL");
+    auto ms = m_store.ttl_ms(arg(args, 1));
+    if (ms < 0)
+      return RespValue::integer(ms);
+    return RespValue::integer(ms / 1000);
+  }
+
+  // PTTL key -> milliseconds
+  RespValue pttl_cmd(const RespArray &args) {
+    if (args.size() != 2)
+      return RespValue::error("ERR wrong number of arguments for PTTL");
+    return RespValue::integer(m_store.ttl_ms(arg(args, 1)));
+  }
+
+  // PERSIST key
+  RespValue persist_cmd(const RespArray &args) {
+    if (args.size() != 2)
+      return RespValue::error("ERR wrong number of arguments for PERSIST");
+    return RespValue::integer(m_store.persist(arg(args, 1)) ? 1 : 0);
   }
 };

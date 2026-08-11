@@ -46,6 +46,13 @@ public:
 
     std::println("listening on port {}", m_port);
 
+    std::thread{[this] {
+      while (true) {
+        std::this_thread::sleep_for(std::chrono::seconds{1});
+        m_store.purge_expired();
+      }
+    }}.detach();
+
     while (true) {
       sockaddr_in client_addr{};
       socklen_t client_len{sizeof(client_addr)};
