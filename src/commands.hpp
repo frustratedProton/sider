@@ -131,7 +131,7 @@ private:
       return RespValue::error("ERR wrong number of arguments for EXISTS");
     int64_t count{0};
     for (std::size_t i = 1; i < args.size(); ++i)
-      if (m_store.exists(arg(args, 1)))
+      if (m_store.exists(arg(args, i)))
         ++count;
     return RespValue::integer(count);
   }

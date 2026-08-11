@@ -1,5 +1,6 @@
 #pragma once
 
+#include <chrono>
 #include <mutex>
 #include <optional>
 #include <shared_mutex>
@@ -26,7 +27,7 @@ public:
   }
 
   std::optional<std::string> get(const std::string &key) {
-    std::shared_lock lock{m_mutex};
+    std::unique_lock lock{m_mutex};
     auto it = m_data.find(key);
 
     if (it == m_data.end())
@@ -46,7 +47,7 @@ public:
   }
 
   bool exists(const std::string &key) {
-    std::shared_lock lock{m_mutex};
+    std::unique_lock lock{m_mutex};
     auto it = m_data.find(key);
     if (it == m_data.end())
       return false;
